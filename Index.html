@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>撲克牌湊 120 · 括號算術 | Poker 120 · Bracket Math</title>
+  <!-- Tailwind CSS for responsive layout -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Nunito, Noto Sans TC, and JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ==========================================================================
+       WARM SUNLIT TABLETOP PUZZLE THEME
+       Background: #FAF8F5 | Cards: #FFFFFF | Indigo: #4F46E5
+       Parentheses Highlight: #D97706 (Warm Amber) | Success: #059669 (Emerald)
+       ========================================================================== */
+    body {
+      font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+      background-color: #FAF8F5;
+      background-image:
+        radial-gradient(circle at 12% 10%, rgba(79, 70, 229, 0.06) 0%, transparent 38%),
+        radial-gradient(circle at 88% 15%, rgba(217, 119, 6, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 50% 92%, rgba(5, 150, 105, 0.06) 0%, transparent 45%);
+      color: #1E293B;
+      min-height: 100vh;
+    }
+
+    .font-math {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Crisp Sunlit Panels */
+    .table-panel {
+      background: #FFFFFF;
+      border: 2px solid #EFECE6;
+      box-shadow: 0 8px 24px -6px rgba(30, 41, 59, 0.06);
+    }
+
+    /* Standard 52-Card Playing Cards */
+    .playing-card {
+      background: #FFFFFF;
+      border: 2.5px solid #E2E8F0;
+      border-radius: 20px;
+      box-shadow:
+        0 8px 18px rgba(15, 23, 42, 0.06),
+        0 4px 0 #CBD5E1;
+      transition:
+        transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+        border-color 0.18s ease,
+        box-shadow 0.18s ease,
+        opacity 0.18s ease;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .playing-card:hover:not(.is-used) {
+      transform: translateY(-6px) scale(1.02);
+      border-color: #4F46E5;
+      box-shadow:
+        0 14px 24px rgba(79, 70, 229, 0.16),
+        0 5px 0 #4338CA;
+    }
+
+    .playing-card:active:not(.is-used) {
+      transform: translateY(-1px) scale(0.98);
+    }
+
+    /* Card already placed into the equation bar */
+    .playing-card.is-used {
+      background: #F8FAFC;
+      border-color: #CBD5E1;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+      opacity: 0.56;
+      transform: translateY(2px) scale(0.97);
+    }
+
+    .playing-card.is-used.is-last-token {
+      opacity: 0.82;
+      border-color: #818CF8;
+    }
+
+    .playing-card.is-used.is-last-token:hover {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+
+    /* Tactile Keypad Buttons */
+    .key-btn {
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+      user-select: none;
+    }
+    .key-btn:active:not(:disabled) {
+      transform: translateY(2px);
+    }
+    .key-btn:disabled {
+      opacity: 0.38;
+      cursor: not-allowed;
+    }
+
+    /* Subtle pulse on operator keys if user taps 2 cards in a row */
+    @keyframes opNudge {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .nudge-op {
+      animation: opNudge 0.35s ease-in-out 2;
+    }
+
+    /* Deal & Token Pop Animations */
+    @keyframes cardDeal {
+      0% { opacity: 0; transform: translateY(-16px) scale(0.92); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .anim-deal {
+      animation: cardDeal 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes tokenPop {
+      0% { opacity: 0; transform: scale(0.75); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .anim-token {
+      animation: tokenPop 0.16s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes cursorBlink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+    .eq-cursor {
+      animation: cursorBlink 1s infinite;
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-amber-200 selection:text-slate-900">
+
+  <!-- Celebration Confetti Canvas -->
+  <canvas id="confetti-canvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
+
+  <!-- Main Centered Responsive Container -->
+  <div class="max-w-3xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4">
+
+    <!-- ========================================================================
+         1. HEADER: Title, 52-Card Deck Tracker, Solved Counter, Bilingual, Download
+         ======================================================================== -->
+    <header class="table-panel rounded-3xl px-4 py-3.5 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-amber-500 text-white font-black text-base flex items-center justify-center shadow-sm shrink-0">
+          (120)
+        </div>
+        <div>
+          <h1 id="txt-title" class="text-base sm:text-xl font-black tracking-tight text-slate-800">
+            撲克牌湊 120 · 括號算術
+          </h1>
+          <p id="txt-subtitle" class="text-xs text-slate-500 font-semibold">
+            不含鬼牌 52 張 · A=1, J=11, Q=12, K=13
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- 52-Card Deck Remaining Counter -->
+        <div class="px-2.5 py-1.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-extrabold flex items-center gap-1">
+          <span>🃏</span>
+          <span id="txt-deck-label">牌堆:</span>
+          <span id="deck-remaining" class="font-math text-indigo-600">47/52</span>
+        </div>
+
+        <!-- Solved Counter -->
+        <div class="px-2.5 py-1.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold flex items-center gap-1">
+          <span>✅</span>
+          <span id="txt-solved-label">已完成:</span>
+          <span id="solved-count" class="font-math text-emerald-600">0</span>
+        </div>
+
+        <!-- Bilingual Toggle (繁體中文 / EN) -->
+        <button id="btn-lang" type="button" class="px-3 py-1.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition">
+          繁體中文 / EN
+        </button>
+
+        <!-- One-Click Offline HTML Download -->
+        <button id="btn-download" type="button" class="key-btn px-3 py-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-[0_3px_0_#047857] flex items-center gap-1.5">
+          <span>⬇️</span>
+          <span id="txt-download">下載離線版 (.html)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================================================
+         2. CUSTOMIZABLE RULES BAR: Card Count (3,4,5,6), Target Input, Deal Button
+         ======================================================================== -->
+    <section class="table-panel rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3.5">
+      <!-- Card Count Selector -->
+      <div class="flex flex-col gap-1">
+        <span id="txt-count-label" class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+          抽牌張數 (Cards)
+        </span>
+        <div class="inline-flex p-1 rounded-2xl bg-[#F5F2EC] border border-[#E7E2D8] gap-1">
+          <button type="button" data-count="3" class="count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition">3張</button>
+          <button type="button" data-count="4" class="count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition">4張</button>
+          <button type="button" data-count="5" class="count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition bg-indigo-600 text-white shadow-sm">5張</button>
+          <button type="button" data-count="6" class="count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition">6張</button>
+        </div>
+      </div>
+
+      <!-- Target Number Input + Quick Buttons (24, 120, Random) -->
+      <div class="flex flex-col gap-1">
+        <label for="input-target" id="txt-target-label" class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+          目標結果 (Target)
+        </label>
+        <div class="flex items-center gap-1.5">
+          <input
+            id="input-target"
+            type="number"
+            value="120"
+            class="w-20 px-2.5 py-1.5 rounded-xl bg-amber-50 border-2 border-amber-400 text-amber-950 font-math font-extrabold text-sm sm:text-base focus:outline-none focus:border-indigo-500"
+          />
+          <button type="button" data-target="24" class="target-chip px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-700 font-math text-xs font-extrabold transition">24</button>
+          <button type="button" data-target="120" class="target-chip px-2.5 py-1.5 rounded-xl bg-amber-100 border border-amber-500 text-amber-900 font-math text-xs font-extrabold transition">120</button>
+          <button type="button" id="btn-random-target" class="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-extrabold transition">
+            🎲 <span id="txt-random">隨機目標</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Primary Deal Button -->
+      <button id="btn-deal" type="button" class="key-btn w-full sm:w-auto px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm sm:text-base shadow-[0_4px_0_#3730A3] flex items-center justify-center gap-2">
+        <span>🃏</span>
+        <span id="txt-deal">發牌 (New Deal)</span>
+      </button>
+    </section>
+
+    <!-- ========================================================================
+         3. MAIN PUZZLE ARENA: 5! Tip, Dealt Cards, Equation Bar, Bracket Keypad
+         ======================================================================== -->
+    <main class="table-panel rounded-3xl p-4 sm:p-6 flex flex-col gap-4">
+
+      <!-- Creative Idea 1: 5! = 120 Factorial Bracket Tip (shown when Target = 120) -->
+      <div id="factorial-banner" class="px-4 py-2.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm font-bold flex items-center justify-between gap-2">
+        <span id="txt-factorial-tip">💡 5! = 120 階乘小秘訣：120 = 5 × 24（或 6×20、8×15、10×12），善用括號 ( ) 先分組湊出 5 和 24！</span>
+        <span class="font-math text-xs font-extrabold px-2.5 py-0.5 rounded-lg bg-amber-200 text-amber-950 shrink-0">5! = 5×24</span>
+      </div>
+
+      <!-- Dealt Cards Row -->
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between px-1">
+          <span id="txt-cards-instruction" class="text-xs font-extrabold text-slate-500">
+            點擊撲克牌加入算式（點擊最後加入的牌可收回）：
+          </span>
+          <span id="cards-used-counter" class="text-xs font-math font-extrabold text-indigo-600">
+            0 / 5
+          </span>
+        </div>
+
+        <div id="cards-row" class="py-1.5 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5">
+          <!-- Dealt 52-deck playing cards render here -->
+        </div>
+      </div>
+
+      <!-- Interactive Equation Builder Display Bar -->
+      <div class="rounded-2xl bg-[#F8F6F1] border-2 border-[#E6E0D4] p-3.5 sm:p-4 flex flex-col gap-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span id="txt-eq-label" class="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+              算式組合區 (Equation)
+            </span>
+            <span id="open-paren-indicator" class="hidden px-2 py-0.5 rounded-full bg-amber-100 border border-amber-400 text-amber-800 text-[11px] font-extrabold">
+              <!-- e.g. 尚有 1 個 ( 待閉合 -->
+            </span>
+          </div>
+
+          <!-- Target & Live Exact Rational Preview -->
+          <div class="flex items-center gap-2">
+            <div id="live-result-pill" class="px-3 py-1 rounded-xl bg-white border border-slate-200 font-math text-xs sm:text-sm font-extrabold text-slate-500">
+              = ?
+            </div>
+            <div class="px-3 py-1 rounded-xl bg-amber-500 text-white font-math text-xs sm:text-sm font-extrabold shadow-xs">
+              <span id="txt-goal-short">目標</span> <span id="board-target">120</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Chips Box -->
+        <div id="equation-tokens" class="min-h-[58px] px-3 py-2.5 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <!-- Equation tokens (cards, warm-amber parentheses, operators) render here -->
+        </div>
+
+        <!-- Live Bracket Breakdown Strip (shows evaluated parenthesized sub-expressions) -->
+        <div id="live-breakdown-bar" class="hidden flex flex-wrap items-center gap-1.5 text-xs">
+          <span id="txt-breakdown-label" class="font-extrabold text-amber-800">括號拆解：</span>
+          <div id="live-breakdown-chips" class="flex flex-wrap items-center gap-1.5"></div>
+        </div>
+      </div>
+
+      <!-- Victory Banner (Shown automatically when all cards are used and value === target) -->
+      <div id="victory-banner" class="hidden rounded-2xl bg-emerald-50 border-2 border-emerald-400 p-4 flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">🎉</span>
+            <div>
+              <h2 id="txt-win-title" class="text-base sm:text-lg font-black text-emerald-900">
+                太棒了！成功湊出 120！
+              </h2>
+              <p id="txt-win-eq" class="font-math text-xs sm:text-sm font-extrabold text-emerald-700"></p>
+            </div>
+          </div>
+          <span id="win-factorial-badge" class="hidden px-3 py-1 rounded-full bg-amber-400 text-amber-950 text-xs font-black shadow-xs">
+            🌟 5! 階乘組合達成！
+          </span>
+        </div>
+
+        <!-- Victory Bracket Breakdown Summary -->
+        <div id="win-breakdown-box" class="hidden px-3 py-2 rounded-xl bg-white/90 border border-emerald-200 text-xs sm:text-sm font-bold text-slate-700 flex flex-wrap items-center gap-2">
+          <span class="font-extrabold text-amber-700">括號拆解 (Bracket Breakdown)：</span>
+          <span id="win-breakdown-text" class="font-math font-extrabold text-slate-800"></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <button id="btn-next-hand" type="button" class="key-btn px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-[0_3px_0_#047857] flex items-center gap-1.5">
+            <span>🃏</span>
+            <span id="txt-next-hand">下一局 (Next Hand)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Inline Feedback / Milestone / Hint Banner -->
+      <div id="feedback-banner" class="hidden px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold text-center transition-all"></div>
+
+      <!-- Dedicated Keypad: Warm Amber Parentheses ( ), Four Operators + − × ÷, Backspace, Clear -->
+      <div class="flex flex-col gap-2.5 pt-1">
+        <!-- Row 1: Prominent Parentheses ( ) + Four Arithmetic Operators + − × ÷ -->
+        <div class="grid grid-cols-6 gap-2 sm:gap-2.5">
+          <!-- Left Parenthesis "(" in Warm Amber -->
+          <button id="btn-lparen" type="button" class="key-btn py-3 sm:py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white shadow-[0_4px_0_#B45309] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span>(</span>
+            <span id="txt-lparen-sub" class="font-sans text-[10px] font-bold opacity-95">左括號</span>
+          </button>
+
+          <!-- Right Parenthesis ")" in Warm Amber with Open-Count Badge -->
+          <button id="btn-rparen" type="button" class="key-btn relative py-3 sm:py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white shadow-[0_4px_0_#B45309] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span id="rparen-badge" class="hidden absolute -top-2 -right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-indigo-600 text-white font-math text-xs font-black flex items-center justify-center shadow">
+              1
+            </span>
+            <span>)</span>
+            <span id="txt-rparen-sub" class="font-sans text-[10px] font-bold opacity-95">右括號</span>
+          </button>
+
+          <!-- Plus "+" -->
+          <button type="button" data-op="+" class="op-btn key-btn py-3 sm:py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_4px_0_#3730A3] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span>+</span>
+            <span class="op-sub font-sans text-[10px] font-bold opacity-90">加</span>
+          </button>
+
+          <!-- Minus "−" -->
+          <button type="button" data-op="-" class="op-btn key-btn py-3 sm:py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_4px_0_#3730A3] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span>−</span>
+            <span class="op-sub font-sans text-[10px] font-bold opacity-90">減</span>
+          </button>
+
+          <!-- Multiply "×" -->
+          <button type="button" data-op="*" class="op-btn key-btn py-3 sm:py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_4px_0_#3730A3] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span>×</span>
+            <span class="op-sub font-sans text-[10px] font-bold opacity-90">乘</span>
+          </button>
+
+          <!-- Divide "÷" -->
+          <button type="button" data-op="/" class="op-btn key-btn py-3 sm:py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_4px_0_#3730A3] font-math text-xl sm:text-2xl font-extrabold flex flex-col items-center justify-center">
+            <span>÷</span>
+            <span class="op-sub font-sans text-[10px] font-bold opacity-90">除</span>
+          </button>
+        </div>
+
+        <!-- Row 2: Backspace (退格) & Clear (清空) -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button id="btn-backspace" type="button" class="key-btn py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+            <span>⌫</span>
+            <span id="txt-backspace">退格 (Backspace)</span>
+          </button>
+          <button id="btn-clear" type="button" class="key-btn py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+            <span>🗑️</span>
+            <span id="txt-clear">清空 (Clear)</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ========================================================================
+         4. HINT & MULTIPLE SOLUTIONS VIEWER (提示一步 & 看多種解法)
+         ======================================================================== -->
+    <section class="table-panel rounded-3xl p-4 sm:p-5 flex flex-col gap-3.5">
+      <div class="flex flex-wrap items-center justify-between gap-2.5">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Step-by-step Parenthesized Hint Button -->
+          <button id="btn-hint" type="button" class="key-btn px-4 py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 border border-amber-400 text-amber-950 font-black text-xs sm:text-sm flex items-center gap-1.5">
+            <span>🔍</span>
+            <span id="txt-hint">提示一步 (Hint)</span>
+          </button>
+
+          <!-- Toggle Multiple Solutions Button -->
+          <button id="btn-toggle-solutions" type="button" class="key-btn px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs sm:text-sm shadow-[0_3px_0_#B45309] flex items-center gap-1.5">
+            <span>💡</span>
+            <span id="txt-toggle-solutions">看多種解法 (Show Solutions)</span>
+          </button>
+        </div>
+
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none text-xs sm:text-sm font-bold text-slate-600">
+          <input id="chk-auto-solutions" type="checkbox" class="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
+          <span id="txt-auto-solutions">發牌時自動顯示解法</span>
+        </label>
+      </div>
+
+      <!-- Collapsible Multiple Solutions Panel (Up to 15 distinct solutions) -->
+      <div id="solutions-panel" class="hidden pt-3 border-t border-slate-100 flex flex-col gap-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500">
+          <div id="solutions-hand-summary" class="flex flex-wrap items-center gap-1.5"></div>
+          <span id="solutions-badge-count" class="px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 font-math font-extrabold"></span>
+        </div>
+
+        <div id="solutions-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <!-- Up to 15 distinct parenthesized solutions rendered here -->
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ==========================================================================
+       APPLICATION LOGIC: 52-CARD DECK, BRACKET PARSER, EXACT SOLVER
+       ========================================================================== -->
+  <script>
+    // Snapshot clean HTML prior to dynamic DOM rendering for offline download
+    const CLEAN_HTML_SNAPSHOT = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+    /* ------------------------------------------------------------------------
+       1. BILINGUAL DICTIONARY (繁體中文 / English)
+       ------------------------------------------------------------------------ */
+    const I18N = {
+      zh: {
+        title: '撲克牌湊 120 · 括號算術',
+        subtitle: '不含鬼牌 52 張 · A=1, J=11, Q=12, K=13',
+        deckLabel: '牌堆:',
+        solvedLabel: '已完成:',
+        download: '下載離線版 (.html)',
+        countLabel: '抽牌張數 (Cards)',
+        cardUnit: '張',
+        targetLabel: '目標結果 (Target)',
+        random: '隨機目標',
+        deal: '發牌 (New Deal)',
+        factorialTip: '💡 5! = 120 階乘小秘訣：120 = 5 × 24（或 6×20、8×15、10×12），善用括號 ( ) 先分組湊出 5 和 24！',
+        cardsInstruction: '點擊撲克牌加入算式（點擊最後加入的牌可收回）：',
+        eqLabel: '算式組合區 (Equation)',
+        goalShort: '目標',
+        breakdownLabel: '括號拆解：',
+        emptyEqPlaceholder: '點擊上方撲克牌或按 ( 開始組合算式…',
+        openParenWarn: (n) => `尚有 ${n} 個 ( 待閉合`,
+        lparenSub: '左括號',
+        rparenSub: '右括號',
+        opSubs: ['加', '減', '乘', '除'],
+        backspace: '退格 (Backspace)',
+        clear: '清空 (Clear)',
+        hint: '提示一步 (Hint)',
+        showSolutions: '看多種解法 (Show Solutions)',
+        hideSolutions: '隱藏解法 (Hide Solutions)',
+        autoSolutions: '發牌時自動顯示解法',
+        nextHand: '下一局 (Next Hand)',
+        winTitle: (t) => `太棒了！成功湊出 ${t}！`,
+        winFactorialBadge: '🌟 5! 階乘組合達成！',
+        factorBadge: '5! 階乘組合',
+        solutionsCount: (n) => `共 ${n} 種精選解法`,
+        noSolutions: '這組牌在目前目標下無精確解，請試試調整目標或按「發牌」！',
+        liveIncomplete: '繼續輸入算式…',
+        liveUnclosed: (n) => `請補上 ${n} 個 )`,
+        liveDivZero: '無法除以 0',
+        liveCardsLeft: (left) => `（還剩 ${left} 張牌未使用）`,
+        msgNeedOp: '請先點選運算符號 (+ − × ÷) 再選下一張牌！',
+        msgCardNotLast: '這張牌在算式中間，請按「退格」或「清空」來修改喔！',
+        msgBracketMade5: '✨ 括號內湊出 5 了！再用另一組括號湊出 24，就能 5 × 24 = 120！',
+        msgBracketMade24: '✨ 括號內湊出 24 了！再湊出 5 就能 5 × 24 = 120！',
+        msgBracketFactor: (val, partner) => `✨ 漂亮的括號分組 (${val})！搭配 ${partner} 就能乘出 120！`,
+        msgDownloaded: '📥 已下載 poker-120-bracket-math.html，隨時都能離線遊玩！',
+        hintNoSol: '目前目標尚無解答提示，試試切換目標或重新發牌！',
+        hintGroup: (step, total, groupText) => `🔍 括號提示 (${step}/${total})：試著先用括號分組湊出 ${groupText}`,
+        hintFull: (expr, target) => `🔍 完整參考結構：${expr} = ${target}`
+      },
+      en: {
+        title: 'Poker 120 · Bracket Math',
+        subtitle: '52-Card Deck (No Jokers) · A=1, J=11, Q=12, K=13',
+        deckLabel: 'Deck:',
+        solvedLabel: 'Solved:',
+        download: 'Download (.html)',
+        countLabel: 'Cards',
+        cardUnit: '',
+        targetLabel: 'Target',
+        random: 'Random',
+        deal: 'New Deal (發牌)',
+        factorialTip: '💡 5! = 120 Tip: 120 = 5 × 24 (or 6×20, 8×15, 10×12) — use brackets ( ) to group cards into 5 and 24!',
+        cardsInstruction: 'Tap cards to build your equation (tap the last used card to undo):',
+        eqLabel: 'Equation Builder',
+        goalShort: 'Goal',
+        breakdownLabel: 'Brackets:',
+        emptyEqPlaceholder: 'Tap a playing card above or press ( to start…',
+        openParenWarn: (n) => `${n} open ( remaining`,
+        lparenSub: 'Open',
+        rparenSub: 'Close',
+        opSubs: ['Add', 'Sub', 'Mul', 'Div'],
+        backspace: 'Backspace (退格)',
+        clear: 'Clear (清空)',
+        hint: 'Hint (提示一步)',
+        showSolutions: 'Show Solutions (看多種解法)',
+        hideSolutions: 'Hide Solutions (隱藏解法)',
+        autoSolutions: 'Auto-show solutions on deal',
+        nextHand: 'Next Hand (下一局)',
+        winTitle: (t) => `Awesome! You reached ${t}!`,
+        winFactorialBadge: '🌟 5! Factorial Grouping!',
+        factorBadge: '5! Factorial',
+        solutionsCount: (n) => `${n} Distinct Solutions`,
+        noSolutions: 'No exact solutions for this target — adjust the target or deal new cards!',
+        liveIncomplete: 'Keep building…',
+        liveUnclosed: (n) => `Close ${n} )`,
+        liveDivZero: 'Cannot divide by 0',
+        liveCardsLeft: (left) => `(${left} card${left > 1 ? 's' : ''} left)`,
+        msgNeedOp: 'Tap an operator (+ − × ÷) before selecting the next card!',
+        msgCardNotLast: 'That card is inside the equation — use Backspace or Clear to edit.',
+        msgBracketMade5: '✨ Bracket group equals 5! Group remaining cards to make 24 for 5 × 24 = 120!',
+        msgBracketMade24: '✨ Bracket group equals 24! Make 5 with the rest for 5 × 24 = 120!',
+        msgBracketFactor: (val, partner) => `✨ Nice bracket group (${val})! Pair it with ${partner} to multiply to 120!`,
+        msgDownloaded: '📥 Downloaded poker-120-bracket-math.html for offline play!',
+        hintNoSol: 'No hint available for this custom target — try another target or New Deal!',
+        hintGroup: (step, total, groupText) => `🔍 Bracket Hint (${step}/${total}): Try grouping cards as ${groupText}`,
+        hintFull: (expr, target) => `🔍 Full Structure Clue: ${expr} = ${target}`
+      }
+    };
+
+    /* ------------------------------------------------------------------------
+       2. APPLICATION STATE
+       ------------------------------------------------------------------------ */
+    const state = {
+      lang: 'zh',
+      cardCount: 5,
+      target: 120,
+      solvedCount: 0,
+      autoShowSolutions: false,
+      solutionsVisible: false,
+
+      deck: [],
+      dealtCards: [],     // Current hand of cards
+      tokens: [],         // Array of { type: 'card' | 'op' | 'lparen' | 'rparen', ... }
+      roundSolved: false,
+      solutions: [],      // Up to 15 distinct solutions
+      hintStep: 0         // Progressive clue index for current hand
+    };
+
+    /* ------------------------------------------------------------------------
+       3. EXACT RATIONAL ARITHMETIC (FRACTIONS)
+       ------------------------------------------------------------------------ */
+    function gcd(a, b) {
+      a = Math.abs(a);
+      b = Math.abs(b);
+      while (b !== 0) {
+        const t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+
+    function frac(n, d = 1) {
+      if (d === 0) return null;
+      if (d < 0) { n = -n; d = -d; }
+      if (n === 0) return { n: 0, d: 1 };
+      const g = gcd(n, d);
+      return { n: n / g, d: d / g };
+    }
+
+    function addFrac(a, b) { return frac(a.n * b.d + b.n * a.d, a.d * b.d); }
+    function subFrac(a, b) { return frac(a.n * b.d - b.n * a.d, a.d * b.d); }
+    function mulFrac(a, b) { return frac(a.n * b.n, a.d * b.d); }
+    function divFrac(a, b) { return b.n === 0 ? null : frac(a.n * b.d, a.d * b.n); }
+
+    function formatFrac(f) {
+      if (!f) return '?';
+      return f.d === 1 ? String(f.n) : `${f.n}/${f.d}`;
+    }
+
+    function matchesTarget(f, target) {
+      if (!f) return false;
+      if (Number.isInteger(target)) return f.d === 1 && f.n === target;
+      return Math.abs(f.n / f.d - target) < 1e-9;
+    }
+
+    /* ------------------------------------------------------------------------
+       4. REAL-TIME RECURSIVE DESCENT PARSER WITH BRACKET BREAKDOWN
+       ------------------------------------------------------------------------ */
+    function countOpenParens(tokens) {
+      let open = 0;
+      for (const tk of tokens) {
+        if (tk.type === 'lparen') open++;
+        else if (tk.type === 'rparen') open--;
+      }
+      return open;
+    }
+
+    /**
+     * Evaluates balanced token list with exact rational math AND records every
+     * parenthesized sub-expression `( ... )` in bottom-up evaluation order.
+     */
+    function evaluateTokensWithBreakdown(tokens) {
+      if (tokens.length === 0) return { status: 'EMPTY' };
+      const open = countOpenParens(tokens);
+      if (open > 0) return { status: 'UNCLOSED', open };
+
+      const last = tokens[tokens.length - 1];
+      if (last.type !== 'card' && last.type !== 'rparen') {
+        return { status: 'INCOMPLETE' };
+      }
+
+      let pos = 0;
+      let divZero = false;
+      const groups = []; // { expr: '(13 − 8)', val: frac(5,1), valStr: '5' }
+
+      function parseExpr() {
+        let left = parseTerm();
+        while (pos < tokens.length && tokens[pos].type === 'op' && (tokens[pos].op === '+' || tokens[pos].op === '-')) {
+          const opTok = tokens[pos++];
+          const right = parseTerm();
+          if (divZero || !left || !right) return null;
+          const val = opTok.op === '+' ? addFrac(left.val, right.val) : subFrac(left.val, right.val);
+          left = {
+            val,
+            text: `${left.text} ${opTok.symbol} ${right.text}`
+          };
+        }
+        return left;
+      }
+
+      function parseTerm() {
+        let left = parseFactor();
+        while (pos < tokens.length && tokens[pos].type === 'op' && (tokens[pos].op === '*' || tokens[pos].op === '/')) {
+          const opTok = tokens[pos++];
+          const right = parseFactor();
+          if (divZero || !left || !right) return null;
+          let val = null;
+          if (opTok.op === '*') {
+            val = mulFrac(left.val, right.val);
+          } else {
+            if (right.val.n === 0) {
+              divZero = true;
+              return null;
+            }
+            val = divFrac(left.val, right.val);
+          }
+          left = {
+            val,
+            text: `${left.text} ${opTok.symbol} ${right.text}`
+          };
+        }
+        return left;
+      }
+
+      function parseFactor() {
+        if (pos >= tokens.length) return null;
+        const tk = tokens[pos];
+        if (tk.type === 'card') {
+          pos++;
+          return {
+            val: frac(tk.value, 1),
+            text: String(tk.value)
+          };
+        }
+        if (tk.type === 'lparen') {
+          pos++; // consume '('
+          const inner = parseExpr();
+          if (pos < tokens.length && tokens[pos].type === 'rparen') {
+            pos++; // consume ')'
+          }
+          if (!inner || divZero) return null;
+          const wrappedText = `(${inner.text})`;
+          groups.push({
+            expr: wrappedText,
+            val: inner.val,
+            valStr: formatFrac(inner.val)
+          });
+          return {
+            val: inner.val,
+            text: wrappedText
+          };
+        }
+        return null;
+      }
+
+      const result = parseExpr();
+      if (divZero) return { status: 'DIV_ZERO' };
+      if (!result || pos !== tokens.length) return { status: 'INCOMPLETE' };
+
+      return {
+        status: 'OK',
+        val: result.val,
+        valStr: formatFrac(result.val),
+        fullText: result.text,
+        groups
+      };
+    }
+
+    /* ------------------------------------------------------------------------
+       5. BACKGROUND EXACT-RATIONAL SOLVER (UP TO 15 DISTINCT SOLUTIONS)
+       ------------------------------------------------------------------------ */
+    const FACTORIAL_PAIRS_120 = [
+      [5, 24],
+      [6, 20],
+      [8, 15],
+      [10, 12]
+    ];
+
+    function is120FactorPair(x, y) {
+      if (x.d !== 1 || y.d !== 1) return false;
+      for (const [p, q] of FACTORIAL_PAIRS_120) {
+        if ((x.n === p && y.n === q) || (x.n === q && y.n === p)) return true;
+      }
+      return false;
+    }
+
+    function solveHand(numbers, target, limit = 15) {
+      const uniqueMap = new Map();
+      const deadStates = new Set();
+      let visited = 0;
+      const maxNodes = numbers.length >= 6 ? 32000 : 55000;
+
+      const startNodes = numbers.map((num) => ({
+        f: frac(num, 1),
+        expr: String(num),
+        prec: 3, // 3 = atom/grouped, 2 = * or /, 1 = + or -
+        addTerms: [String(num)],
+        mulTerms: [String(num)],
+        canon: String(num),
+        isFactorialSplit: false,
+        nonIntSteps: 0
+      }));
+
+      function search(nodes) {
+        if (uniqueMap.size >= limit) return true;
+        if (visited++ > maxNodes) return uniqueMap.size > 0;
+
+        if (nodes.length === 1) {
+          const last = nodes[0];
+          if (matchesTarget(last.f, target)) {
+            if (!uniqueMap.has(last.canon)) {
+              uniqueMap.set(last.canon, {
+                expr: last.expr,
+                isFactorialSplit: last.isFactorialSplit,
+                nonIntSteps: last.nonIntSteps
+              });
+            }
+            return true;
+          }
+          return false;
+        }
+
+        const key = nodes.map((nd) => `${nd.f.n}/${nd.f.d}`).sort().join(',');
+        if (deadStates.has(key)) return false;
+
+        let found = false;
+        const len = nodes.length;
+
+        for (let i = 0; i < len; i++) {
+          for (let j = i + 1; j < len; j++) {
+            const a = nodes[i];
+            const b = nodes[j];
+            const rest = [];
+            for (let k = 0; k < len; k++) {
+              if (k !== i && k !== j) rest.push(nodes[k]);
+            }
+
+            const candidates = [];
+
+            // Addition (commutative)
+            {
+              const f = addFrac(a.f, b.f);
+              const terms = [...a.addTerms, ...b.addTerms].sort();
+              const canon = `+(${terms.join(',')})`;
+              candidates.push({
+                f,
+                expr: `${a.expr} + ${b.expr}`,
+                prec: 1,
+                addTerms: terms,
+                mulTerms: [canon],
+                canon,
+                isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit,
+                nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+              });
+            }
+
+            // Multiplication (commutative)
+            {
+              const f = mulFrac(a.f, b.f);
+              const terms = [...a.mulTerms, ...b.mulTerms].sort();
+              const canon = `*(${terms.join(',')})`;
+              const isFact = target === 120 && f.d === 1 && f.n === 120 && is120FactorPair(a.f, b.f);
+              // Wrap compound operands in parentheses for crystal-clear bracket reading
+              const wrapL = a.prec < 2 || (isFact && a.prec === 2);
+              const wrapR = b.prec < 2 || (isFact && b.prec === 2);
+              const L = wrapL ? `(${a.expr})` : a.expr;
+              const R = wrapR ? `(${b.expr})` : b.expr;
+              candidates.push({
+                f,
+                expr: `${L} × ${R}`,
+                prec: 2,
+                addTerms: [canon],
+                mulTerms: terms,
+                canon,
+                isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit || isFact,
+                nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+              });
+            }
+
+            // Subtraction: a - b
+            {
+              const f = subFrac(a.f, b.f);
+              const canon = `-(${a.canon},${b.canon})`;
+              const R = b.prec <= 1 ? `(${b.expr})` : b.expr;
+              candidates.push({
+                f,
+                expr: `${a.expr} − ${R}`,
+                prec: 1,
+                addTerms: [canon],
+                mulTerms: [canon],
+                canon,
+                isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit,
+                nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+              });
+            }
+
+            // Subtraction: b - a
+            if (a.f.n !== b.f.n || a.f.d !== b.f.d) {
+              const f = subFrac(b.f, a.f);
+              const canon = `-(${b.canon},${a.canon})`;
+              const R = a.prec <= 1 ? `(${a.expr})` : a.expr;
+              candidates.push({
+                f,
+                expr: `${b.expr} − ${R}`,
+                prec: 1,
+                addTerms: [canon],
+                mulTerms: [canon],
+                canon,
+                isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit,
+                nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+              });
+            }
+
+            // Division: a / b
+            if (b.f.n !== 0) {
+              const f = divFrac(a.f, b.f);
+              if (f) {
+                const canon = `/(${a.canon},${b.canon})`;
+                const L = a.prec < 2 ? `(${a.expr})` : a.expr;
+                const R = b.prec <= 2 ? `(${b.expr})` : b.expr;
+                candidates.push({
+                  f,
+                  expr: `${L} ÷ ${R}`,
+                  prec: 2,
+                  addTerms: [canon],
+                  mulTerms: [canon],
+                  canon,
+                  isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit,
+                  nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+                });
+              }
+            }
+
+            // Division: b / a
+            if (a.f.n !== 0 && (a.f.n !== b.f.n || a.f.d !== b.f.d)) {
+              const f = divFrac(b.f, a.f);
+              if (f) {
+                const canon = `/(${b.canon},${a.canon})`;
+                const L = b.prec < 2 ? `(${b.expr})` : b.expr;
+                const R = a.prec <= 2 ? `(${a.expr})` : a.expr;
+                candidates.push({
+                  f,
+                  expr: `${L} ÷ ${R}`,
+                  prec: 2,
+                  addTerms: [canon],
+                  mulTerms: [canon],
+                  canon,
+                  isFactorialSplit: a.isFactorialSplit || b.isFactorialSplit,
+                  nonIntSteps: a.nonIntSteps + b.nonIntSteps + (f.d !== 1 ? 1 : 0)
+                });
+              }
+            }
+
+            for (const cand of candidates) {
+              if (Math.abs(cand.f.n) > 1e8 || cand.f.d > 1e6) continue;
+              if (search([...rest, cand])) {
+                found = true;
+                if (uniqueMap.size >= limit) return true;
+              }
+            }
+          }
+        }
+
+        if (!found && visited < maxNodes) deadStates.add(key);
+        return found;
+      }
+
+      search(startNodes);
+
+      // Sort 5! factorial splits first, then integer-only equations, then shortest
+      return Array.from(uniqueMap.values()).sort((a, b) => {
+        if (a.isFactorialSplit !== b.isFactorialSplit) return a.isFactorialSplit ? -1 : 1;
+        if (a.nonIntSteps !== b.nonIntSteps) return a.nonIntSteps - b.nonIntSteps;
+        return a.expr.length - b.expr.length;
+      });
+    }
+
+    /* ------------------------------------------------------------------------
+       6. STANDARD 52-CARD DECK (NO JOKERS) & SOLVABLE HAND GENERATOR
+       ------------------------------------------------------------------------ */
+    function createShuffledDeck() {
+      const suits = [
+        { symbol: '♠', color: 'slate' },
+        { symbol: '♥', color: 'rose' },
+        { symbol: '♦', color: 'amber' },
+        { symbol: '♣', color: 'emerald' }
+      ];
+      const ranks = [
+        { rank: 'A', val: 1 },
+        { rank: '2', val: 2 },
+        { rank: '3', val: 3 },
+        { rank: '4', val: 4 },
+        { rank: '5', val: 5 },
+        { rank: '6', val: 6 },
+        { rank: '7', val: 7 },
+        { rank: '8', val: 8 },
+        { rank: '9', val: 9 },
+        { rank: '10', val: 10 },
+        { rank: 'J', val: 11 },
+        { rank: 'Q', val: 12 },
+        { rank: 'K', val: 13 }
+      ];
+
+      const cards = [];
+      let uid = 1;
+      for (const s of suits) {
+        for (const r of ranks) {
+          cards.push({ uid: uid++, suit: s.symbol, color: s.color, rank: r.rank, val: r.val });
+        }
+      }
+      return shuffle(cards);
+    }
+
+    function shuffle(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function dealNewCards() {
+      hideFeedback();
+      state.tokens = [];
+      state.roundSolved = false;
+      state.hintStep = 0;
+
+      // Reshuffle full 52-card deck when fewer cards remain than needed
+      if (state.deck.length < state.cardCount) {
+        state.deck = createShuffledDeck();
+      }
+
+      let chosenHand = null;
+      let nextDeck = null;
+      let foundSolutions = [];
+
+      for (let attempt = 0; attempt < 65; attempt++) {
+        const pool = state.deck.length >= state.cardCount ? shuffle(state.deck) : createShuffledDeck();
+        const hand = pool.slice(0, state.cardCount);
+        const rest = pool.slice(state.cardCount);
+        const sols = solveHand(hand.map((c) => c.val), state.target, 15);
+
+        chosenHand = hand;
+        nextDeck = rest;
+        foundSolutions = sols;
+        if (sols.length > 0) break;
+      }
+
+      state.deck = nextDeck;
+      state.dealtCards = chosenHand;
+      state.solutions = foundSolutions;
+      state.solutionsVisible = state.autoShowSolutions;
+
+      render();
+    }
+
+    /* ------------------------------------------------------------------------
+       7. INTERACTIVE EQUATION BUILDER & SMART BRACKET RULES
+       ------------------------------------------------------------------------ */
+    function isCardUsed(cardIndex) {
+      return state.tokens.some((tk) => tk.type === 'card' && tk.cardIndex === cardIndex);
+    }
+
+    function onCardClick(cardIndex) {
+      if (state.roundSolved) return;
+      const last = state.tokens[state.tokens.length - 1];
+
+      // If card is already used:
+      if (isCardUsed(cardIndex)) {
+        // If it's the very last token, tapping it removes it cleanly!
+        if (last && last.type === 'card' && last.cardIndex === cardIndex) {
+          state.tokens.pop();
+          hideFeedback();
+          render();
+        } else {
+          showFeedback(I18N[state.lang].msgCardNotLast, 'info');
+        }
+        return;
+      }
+
+      // If preceded by another number or ")", nudge user to choose an operator first
+      if (last && (last.type === 'card' || last.type === 'rparen')) {
+        showFeedback(I18N[state.lang].msgNeedOp, 'info');
+        nudgeOperators();
+        return;
+      }
+
+      const card = state.dealtCards[cardIndex];
+      state.tokens.push({
+        type: 'card',
+        cardIndex,
+        value: card.val,
+        rank: card.rank,
+        suit: card.suit
+      });
+      hideFeedback();
+      checkProgressAndVictory();
+      render();
+    }
+
+    /**
+     * Left Parenthesis "(" smart input rule:
+     * - Allowed at start, after "(", or after "+ − × ÷".
+     * - If tapped right after a number or ")", automatically inserts "× (" for convenience!
+     */
+    function onLeftParenClick() {
+      if (state.roundSolved) return;
+      const last = state.tokens[state.tokens.length - 1];
+
+      if (last && (last.type === 'card' || last.type === 'rparen')) {
+        state.tokens.push({ type: 'op', op: '*', symbol: '×' });
+      }
+      state.tokens.push({ type: 'lparen' });
+      hideFeedback();
+      render();
+    }
+
+    /**
+     * Right Parenthesis ")" smart input rule:
+     * - Enabled whenever open "(" > 0 AND preceded by a number or ")".
+     */
+    function onRightParenClick() {
+      if (state.roundSolved) return;
+      const open = countOpenParens(state.tokens);
+      const last = state.tokens[state.tokens.length - 1];
+      if (open <= 0 || !last || (last.type !== 'card' && last.type !== 'rparen')) return;
+
+      state.tokens.push({ type: 'rparen' });
+      hideFeedback();
+      checkProgressAndVictory();
+      render();
+    }
+
+    /**
+     * Four Arithmetic Operators (+ − × ÷):
+     * - Allowed after a number or ")".
+     * - Tapping an operator right after another operator smoothly replaces it!
+     */
+    function onOperatorClick(op) {
+      if (state.roundSolved) return;
+      const opSymbols = { '+': '+', '-': '−', '*': '×', '/': '÷' };
+      const last = state.tokens[state.tokens.length - 1];
+      if (!last) return;
+
+      if (last.type === 'op') {
+        last.op = op;
+        last.symbol = opSymbols[op];
+        hideFeedback();
+        render();
+        return;
+      }
+
+      if (last.type === 'card' || last.type === 'rparen') {
+        state.tokens.push({ type: 'op', op, symbol: opSymbols[op] });
+        hideFeedback();
+        render();
+      }
+    }
+
+    function onBackspace() {
+      if (state.tokens.length === 0) return;
+      state.tokens.pop();
+      state.roundSolved = false;
+      hideFeedback();
+      render();
+    }
+
+    function onClear() {
+      state.tokens = [];
+      state.roundSolved = false;
+      hideFeedback();
+      render();
+    }
+
+    function nudgeOperators() {
+      document.querySelectorAll('.op-btn').forEach((btn) => {
+        btn.classList.remove('nudge-op');
+        void btn.offsetWidth;
+        btn.classList.add('nudge-op');
+      });
+    }
+
+    function checkProgressAndVictory() {
+      const evalRes = evaluateTokensWithBreakdown(state.tokens);
+      const usedCount = state.tokens.filter((tk) => tk.type === 'card').length;
+      const dict = I18N[state.lang];
+
+      // Celebrate mid-game 5! = 120 bracket milestones (e.g., closing "(13 − 8)" -> 5 or "(12 + 12)" -> 24)
+      const lastToken = state.tokens[state.tokens.length - 1];
+      if (
+        state.target === 120 &&
+        lastToken &&
+        lastToken.type === 'rparen' &&
+        evalRes.groups &&
+        evalRes.groups.length > 0 &&
+        usedCount < state.cardCount
+      ) {
+        const latestGroup = evalRes.groups[evalRes.groups.length - 1];
+        if (latestGroup.val.d === 1) {
+          const v = latestGroup.val.n;
+          if (v === 5) showFeedback(dict.msgBracketMade5, 'sparkle');
+          else if (v === 24) showFeedback(dict.msgBracketMade24, 'sparkle');
+          else if (v === 6) showFeedback(dict.msgBracketFactor(6, 20), 'sparkle');
+          else if (v === 20) showFeedback(dict.msgBracketFactor(20, 6), 'sparkle');
+          else if (v === 8) showFeedback(dict.msgBracketFactor(8, 15), 'sparkle');
+          else if (v === 15) showFeedback(dict.msgBracketFactor(15, 8), 'sparkle');
+          else if (v === 10) showFeedback(dict.msgBracketFactor(10, 12), 'sparkle');
+          else if (v === 12) showFeedback(dict.msgBracketFactor(12, 10), 'sparkle');
+        }
+      }
+
+      // Check automatic victory: all dealt cards used, balanced brackets, exact value === target
+      if (
+        usedCount === state.cardCount &&
+        evalRes.status === 'OK' &&
+        matchesTarget(evalRes.val, state.target)
+      ) {
+        if (!state.roundSolved) {
+          state.roundSolved = true;
+          state.solvedCount += 1;
+        }
+        hideFeedback();
+        launchConfetti();
+      }
+    }
+
+    /* ------------------------------------------------------------------------
+       8. PROGRESSIVE BRACKET HINT SYSTEM
+       ------------------------------------------------------------------------ */
+    function showNextHint() {
+      const dict = I18N[state.lang];
+      if (!state.solutions || state.solutions.length === 0) {
+        showFeedback(dict.hintNoSol, 'info');
+        return;
+      }
+
+      const bestSol = state.solutions[0];
+      // Extract parenthesized sub-expressions from the best solution
+      const matches = bestSol.expr.match(/\([^()]+\)/g) || [];
+      state.hintStep += 1;
+
+      if (matches.length > 0 && state.hintStep <= matches.length) {
+        const groupExpr = matches[state.hintStep - 1];
+        // Evaluate that group text cleanly
+        const groupVal = evaluateSimpleExprText(groupExpr);
+        const clueText = groupVal !== null ? `${groupExpr} = ${groupVal}` : groupExpr;
+        showFeedback(dict.hintGroup(state.hintStep, matches.length, clueText), 'sparkle');
+      } else {
+        showFeedback(dict.hintFull(bestSol.expr, state.target), 'sparkle');
+      }
+    }
+
+    function evaluateSimpleExprText(exprStr) {
+      try {
+        const cleaned = exprStr
+          .replace(/×/g, '*')
+          .replace(/÷/g, '/')
+          .replace(/−/g, '-');
+        if (!/^[0-9+\-*/().\s]+$/.test(cleaned)) return null;
+        const val = Function(`"use strict"; return (${cleaned});`)();
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          return Number.isInteger(val) ? String(val) : val.toFixed(2).replace(/\.?0+$/, '');
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    /* ------------------------------------------------------------------------
+       9. UI RENDERING
+       ------------------------------------------------------------------------ */
+    function render() {
+      const dict = I18N[state.lang];
+
+      // Header labels & counters
+      document.getElementById('txt-title').textContent = dict.title;
+      document.getElementById('txt-subtitle').textContent = dict.subtitle;
+      document.getElementById('txt-deck-label').textContent = dict.deckLabel;
+      document.getElementById('deck-remaining').textContent = `${state.deck.length}/52`;
+      document.getElementById('txt-solved-label').textContent = dict.solvedLabel;
+      document.getElementById('solved-count').textContent = state.solvedCount;
+      document.getElementById('txt-download').textContent = dict.download;
+
+      // Rules bar
+      document.getElementById('txt-count-label').textContent = dict.countLabel;
+      document.getElementById('txt-target-label').textContent = dict.targetLabel;
+      document.getElementById('txt-random').textContent = dict.random;
+      document.getElementById('txt-deal').textContent = dict.deal;
+      document.getElementById('txt-factorial-tip').textContent = dict.factorialTip;
+
+      document.querySelectorAll('.count-btn').forEach((btn) => {
+        const c = Number(btn.dataset.count);
+        btn.textContent = `${c}${dict.cardUnit}`;
+        btn.className =
+          c === state.cardCount
+            ? 'count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition bg-indigo-600 text-white shadow-sm'
+            : 'count-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold transition text-slate-600 hover:bg-white';
+      });
+
+      document.querySelectorAll('.target-chip').forEach((chip) => {
+        const t = Number(chip.dataset.target);
+        chip.className =
+          t === state.target
+            ? 'target-chip px-2.5 py-1.5 rounded-xl bg-amber-100 border border-amber-500 text-amber-900 font-math text-xs font-extrabold transition'
+            : 'target-chip px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-700 font-math text-xs font-extrabold transition';
+      });
+
+      // Show 5! = 120 tip only when target is 120
+      document.getElementById('factorial-banner').classList.toggle('hidden', state.target !== 120);
+
+      // Cards row
+      const usedCount = state.tokens.filter((tk) => tk.type === 'card').length;
+      document.getElementById('txt-cards-instruction').textContent = dict.cardsInstruction;
+      document.getElementById('cards-used-counter').textContent = `${usedCount} / ${state.cardCount}`;
+
+      const cardsRow = document.getElementById('cards-row');
+      cardsRow.innerHTML = '';
+      const lastToken = state.tokens[state.tokens.length - 1];
+
+      state.dealtCards.forEach((card, idx) => {
+        const used = isCardUsed(idx);
+        const isLastCard = used && lastToken && lastToken.type === 'card' && lastToken.cardIndex === idx;
+
+        const colorMap = {
+          slate: { text: 'text-slate-800', bg: 'bg-slate-100' },
+          rose: { text: 'text-rose-600', bg: 'bg-rose-50' },
+          amber: { text: 'text-amber-700', bg: 'bg-amber-50' },
+          emerald: { text: 'text-emerald-700', bg: 'bg-emerald-50' }
+        };
+        const cStyle = colorMap[card.color] || colorMap.slate;
+        const isFaceOrAce = ['A', 'J', 'Q', 'K'].includes(card.rank);
+        const badgeStyle = isFaceOrAce
+          ? 'bg-amber-200 text-amber-950 border border-amber-400'
+          : 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+        const badgeText = isFaceOrAce ? `${card.rank}=${card.val}` : `=${card.val}`;
+
+        const cardEl = document.createElement('div');
+        cardEl.className =
+          `playing-card relative w-20 h-32 sm:w-24 sm:h-36 p-2 sm:p-2.5 flex flex-col justify-between anim-deal ` +
+          (used ? 'is-used ' : '') +
+          (isLastCard ? 'is-last-token ' : '');
+
+        cardEl.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div class="flex flex-col items-center leading-none ${cStyle.text}">
+              <span class="text-base sm:text-lg font-black">${card.rank}</span>
+              <span class="text-xs sm:text-sm">${card.suit}</span>
+            </div>
+            <span class="px-1.5 py-0.5 rounded-lg font-math text-[10px] sm:text-[11px] font-extrabold ${badgeStyle}">
+              ${badgeText}
+            </span>
+          </div>
+
+          <div class="mx-auto w-9 h-9 sm:w-11 sm:h-11 rounded-full ${cStyle.bg} flex items-center justify-center">
+            <span class="text-xl sm:text-2xl ${cStyle.text}">${card.suit}</span>
+          </div>
+
+          <div class="text-center text-[10px] sm:text-[11px] font-extrabold ${
+            used ? 'text-indigo-600' : cStyle.text + ' opacity-75'
+          }">
+            ${used ? (state.lang === 'zh' ? '已加入' : 'Used') : `${card.rank}${card.suit}`}
+          </div>
+        `;
+
+        cardEl.addEventListener('click', () => onCardClick(idx));
+        cardsRow.appendChild(cardEl);
+      });
+
+      // Equation Builder Bar
+      document.getElementById('txt-eq-label').textContent = dict.eqLabel;
+      document.getElementById('txt-goal-short').textContent = dict.goalShort;
+      document.getElementById('board-target').textContent = state.target;
+
+      const openParens = countOpenParens(state.tokens);
+      const openInd = document.getElementById('open-paren-indicator');
+      if (openParens > 0) {
+        openInd.textContent = dict.openParenWarn(openParens);
+        openInd.classList.remove('hidden');
+      } else {
+        openInd.classList.add('hidden');
+      }
+
+      // Render Tokens inside Equation Box
+      const tokensEl = document.getElementById('equation-tokens');
+      tokensEl.innerHTML = '';
+
+      if (state.tokens.length === 0) {
+        const ph = document.createElement('span');
+        ph.className = 'text-xs sm:text-sm font-bold text-slate-400';
+        ph.textContent = dict.emptyEqPlaceholder;
+        tokensEl.appendChild(ph);
+      } else {
+        state.tokens.forEach((tk) => {
+          const chip = document.createElement('span');
+          chip.className = 'anim-token inline-flex items-center justify-center font-math font-extrabold ';
+
+          if (tk.type === 'card') {
+            chip.className +=
+              'px-2.5 py-1 rounded-xl bg-indigo-50 border-2 border-indigo-200 text-indigo-900 text-base sm:text-lg gap-1';
+            chip.innerHTML = `<span>${tk.value}</span><span class="text-[10px] font-sans text-indigo-400">${tk.rank}${tk.suit}</span>`;
+          } else if (tk.type === 'lparen' || tk.type === 'rparen') {
+            // Warm amber highlight for parentheses
+            chip.className +=
+              'px-2.5 py-1 rounded-xl bg-amber-100 border-2 border-amber-400 text-amber-800 text-lg sm:text-xl shadow-2xs';
+            chip.textContent = tk.type === 'lparen' ? '(' : ')';
+          } else if (tk.type === 'op') {
+            chip.className += 'px-1.5 py-1 text-slate-700 text-lg sm:text-xl';
+            chip.textContent = tk.symbol;
+          }
+
+          tokensEl.appendChild(chip);
+        });
+      }
+
+      if (!state.roundSolved) {
+        const cursor = document.createElement('span');
+        cursor.className = 'eq-cursor inline-block w-0.5 h-6 bg-indigo-500 rounded ml-0.5';
+        tokensEl.appendChild(cursor);
+      }
+
+      // Real-time Exact Rational Evaluation & Live Bracket Breakdown
+      const evalRes = evaluateTokensWithBreakdown(state.tokens);
+      const livePill = document.getElementById('live-result-pill');
+      const liveBreakdownBar = document.getElementById('live-breakdown-bar');
+      const liveBreakdownChips = document.getElementById('live-breakdown-chips');
+      document.getElementById('txt-breakdown-label').textContent = dict.breakdownLabel;
+
+      if (evalRes.status === 'EMPTY') {
+        livePill.className = 'px-3 py-1 rounded-xl bg-white border border-slate-200 font-math text-xs sm:text-sm font-extrabold text-slate-400';
+        livePill.textContent = '= ?';
+        liveBreakdownBar.classList.add('hidden');
+      } else if (evalRes.status === 'UNCLOSED') {
+        livePill.className = 'px-3 py-1 rounded-xl bg-amber-50 border border-amber-300 text-xs font-extrabold text-amber-800';
+        livePill.textContent = dict.liveUnclosed(evalRes.open);
+        liveBreakdownBar.classList.add('hidden');
+      } else if (evalRes.status === 'INCOMPLETE') {
+        livePill.className = 'px-3 py-1 rounded-xl bg-white border border-slate-200 text-xs font-extrabold text-slate-500';
+        livePill.textContent = dict.liveIncomplete;
+        liveBreakdownBar.classList.add('hidden');
+      } else if (evalRes.status === 'DIV_ZERO') {
+        livePill.className = 'px-3 py-1 rounded-xl bg-rose-50 border border-rose-300 text-xs font-extrabold text-rose-700';
+        livePill.textContent = dict.liveDivZero;
+        liveBreakdownBar.classList.add('hidden');
+      } else if (evalRes.status === 'OK') {
+        const isTargetMatch = matchesTarget(evalRes.val, state.target);
+        const cardsLeft = state.cardCount - usedCount;
+
+        if (isTargetMatch && cardsLeft === 0) {
+          livePill.className = 'px-3 py-1 rounded-xl bg-emerald-600 text-white font-math text-xs sm:text-sm font-extrabold';
+          livePill.textContent = `= ${evalRes.valStr} ✓`;
+        } else if (isTargetMatch && cardsLeft > 0) {
+          livePill.className = 'px-3 py-1 rounded-xl bg-amber-100 border border-amber-400 text-amber-900 font-math text-xs font-extrabold';
+          livePill.textContent = `= ${evalRes.valStr} ${dict.liveCardsLeft(cardsLeft)}`;
+        } else {
+          livePill.className = 'px-3 py-1 rounded-xl bg-white border border-indigo-200 text-indigo-900 font-math text-xs sm:text-sm font-extrabold';
+          livePill.textContent = `= ${evalRes.valStr}`;
+        }
+
+        // Show live evaluated bracket groups (e.g. "(13 − 8) = 5")
+        if (evalRes.groups && evalRes.groups.length > 0) {
+          liveBreakdownBar.classList.remove('hidden');
+          liveBreakdownChips.innerHTML = evalRes.groups
+            .map(
+              (g) =>
+                `<span class="px-2 py-0.5 rounded-lg bg-amber-100 border border-amber-300 font-math font-extrabold text-amber-950">${g.expr} = ${g.valStr}</span>`
+            )
+            .join('');
+        } else {
+          liveBreakdownBar.classList.add('hidden');
+        }
+      }
+
+      // Victory Banner & Bracket Breakdown
+      const victoryBanner = document.getElementById('victory-banner');
+      if (state.roundSolved && evalRes.status === 'OK') {
+        victoryBanner.classList.remove('hidden');
+        document.getElementById('txt-win-title').textContent = dict.winTitle(state.target);
+        document.getElementById('txt-win-eq').textContent = `${evalRes.fullText} = ${evalRes.valStr}`;
+        document.getElementById('txt-next-hand').textContent = dict.nextHand;
+
+        // Check if 120 factorial grouping was used
+        const usedFactorialGroup =
+          state.target === 120 &&
+          evalRes.groups.some(
+            (g) => g.val.d === 1 && [5, 24, 6, 20, 8, 15, 10, 12].includes(g.val.n)
+          );
+        const factBadge = document.getElementById('win-factorial-badge');
+        factBadge.textContent = dict.winFactorialBadge;
+        factBadge.classList.toggle('hidden', !usedFactorialGroup);
+
+        // Victory Bracket Breakdown
+        const winBreakdownBox = document.getElementById('win-breakdown-box');
+        if (evalRes.groups.length > 0) {
+          winBreakdownBox.classList.remove('hidden');
+          const parts = evalRes.groups.map((g) => `${g.expr} = ${g.valStr}`).join(' ， ');
+          document.getElementById('win-breakdown-text').textContent = `${parts}  →  ${evalRes.fullText} = ${evalRes.valStr}`;
+        } else {
+          winBreakdownBox.classList.add('hidden');
+        }
+      } else {
+        victoryBanner.classList.add('hidden');
+      }
+
+      // Keypad Button States & Labels
+      document.getElementById('txt-lparen-sub').textContent = dict.lparenSub;
+      document.getElementById('txt-rparen-sub').textContent = dict.rparenSub;
+      document.getElementById('txt-backspace').textContent = dict.backspace;
+      document.getElementById('txt-clear').textContent = dict.clear;
+      document.querySelectorAll('.op-sub').forEach((el, i) => {
+        el.textContent = dict.opSubs[i];
+      });
+
+      const canCloseParen =
+        !state.roundSolved &&
+        openParens > 0 &&
+        lastToken &&
+        (lastToken.type === 'card' || lastToken.type === 'rparen');
+
+      const rparenBtn = document.getElementById('btn-rparen');
+      const rparenBadge = document.getElementById('rparen-badge');
+      rparenBtn.disabled = !canCloseParen;
+      if (openParens > 0) {
+        rparenBadge.textContent = openParens;
+        rparenBadge.classList.remove('hidden');
+      } else {
+        rparenBadge.classList.add('hidden');
+      }
+
+      document.getElementById('btn-lparen').disabled = state.roundSolved;
+
+      const canPressOp =
+        !state.roundSolved &&
+        lastToken &&
+        (lastToken.type === 'card' || lastToken.type === 'rparen' || lastToken.type === 'op');
+      document.querySelectorAll('.op-btn').forEach((btn) => {
+        btn.disabled = !canPressOp;
+      });
+
+      document.getElementById('btn-backspace').disabled = state.tokens.length === 0;
+      document.getElementById('btn-clear').disabled = state.tokens.length === 0;
+
+      // Hint & Multiple Solutions Controls
+      document.getElementById('txt-hint').textContent = dict.hint;
+      document.getElementById('txt-auto-solutions').textContent = dict.autoSolutions;
+      document.getElementById('txt-toggle-solutions').textContent = state.solutionsVisible
+        ? dict.hideSolutions
+        : dict.showSolutions;
+
+      renderSolutionsList(dict);
+    }
+
+    function renderSolutionsList(dict) {
+      const panel = document.getElementById('solutions-panel');
+      if (!state.solutionsVisible) {
+        panel.classList.add('hidden');
+        return;
+      }
+
+      panel.classList.remove('hidden');
+
+      // Hand summary chips
+      const summaryEl = document.getElementById('solutions-hand-summary');
+      summaryEl.innerHTML = state.dealtCards
+        .map((c) => {
+          const isRed = c.suit === '♥' || c.suit === '♦';
+          return `<span class="px-2 py-0.5 rounded-lg bg-slate-100 font-math font-extrabold ${
+            isRed ? 'text-rose-600' : 'text-slate-800'
+          }">${c.rank}${c.suit}(${c.val})</span>`;
+        })
+        .join('');
+
+      document.getElementById('solutions-badge-count').textContent = dict.solutionsCount(state.solutions.length);
+
+      const listEl = document.getElementById('solutions-list');
+      if (state.solutions.length === 0) {
+        listEl.innerHTML = `
+          <div class="col-span-full p-4 rounded-2xl bg-rose-50 text-rose-800 text-xs sm:text-sm font-bold text-center">
+            ${dict.noSolutions}
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = state.solutions
+        .map((sol, idx) => {
+          // Highlight parentheses "(" and ")" in warm amber for readability
+          const styledExpr = sol.expr.replace(
+            /([()])/g,
+            '<span class="text-amber-600 font-black">$1</span>'
+          );
+          return `
+            <div class="px-3.5 py-2.5 rounded-2xl ${
+              sol.isFactorialSplit
+                ? 'bg-amber-50 border-2 border-amber-300'
+                : 'bg-slate-50 border border-slate-200'
+            } flex items-center justify-between gap-2">
+              <div class="font-math text-xs sm:text-sm font-extrabold text-slate-800 break-words">
+                <span class="text-slate-400 mr-1">#${idx + 1}</span>
+                ${styledExpr} <span class="text-emerald-600">= ${state.target}</span>
+              </div>
+              ${
+                sol.isFactorialSplit
+                  ? `<span class="px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black shrink-0">
+                      ${dict.factorBadge}
+                    </span>`
+                  : ''
+              }
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    function showFeedback(message, type) {
+      const el = document.getElementById('feedback-banner');
+      el.textContent = message;
+      el.className = 'px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold text-center transition-all ';
+      if (type === 'sparkle') {
+        el.classList.add('bg-amber-50', 'border-2', 'border-amber-300', 'text-amber-950');
+      } else {
+        el.classList.add('bg-indigo-50', 'border-2', 'border-indigo-200', 'text-indigo-900');
+      }
+    }
+
+    function hideFeedback() {
+      document.getElementById('feedback-banner').className = 'hidden';
+    }
+
+    /* ------------------------------------------------------------------------
+       10. CELEBRATION CONFETTI & OFFLINE DOWNLOAD
+       ------------------------------------------------------------------------ */
+    function launchConfetti() {
+      const canvas = document.getElementById('confetti-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const colors = ['#4F46E5', '#D97706', '#059669', '#F59E0B', '#6366F1'];
+      const particles = Array.from({ length: 85 }, () => ({
+        x: canvas.width * 0.5 + (Math.random() - 0.5) * 260,
+        y: canvas.height * 0.42,
+        vx: (Math.random() - 0.5) * 14,
+        vy: -Math.random() * 13 - 4,
+        size: Math.random() * 8 + 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rot: Math.random() * 360,
+        vRot: (Math.random() - 0.5) * 12
+      }));
+
+      let frame = 0;
+      function tick() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach((p) => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.42;
+          p.rot += p.vRot;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.rot * Math.PI) / 180);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.65);
+          ctx.restore();
+        });
+        if (++frame < 75) requestAnimationFrame(tick);
+        else ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function downloadOfflineHtml() {
+      const blob = new Blob([CLEAN_HTML_SNAPSHOT], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'poker-120-bracket-math.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showFeedback(I18N[state.lang].msgDownloaded, 'sparkle');
+    }
+
+    /* ------------------------------------------------------------------------
+       11. EVENT LISTENERS & KEYBOARD SHORTCUTS
+       ------------------------------------------------------------------------ */
+    window.addEventListener('DOMContentLoaded', () => {
+      state.deck = createShuffledDeck();
+
+      // Card count buttons (3, 4, 5, 6)
+      document.querySelectorAll('.count-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.cardCount = Number(btn.dataset.count);
+          dealNewCards();
+        });
+      });
+
+      // Target input & quick preset buttons (24, 120, Random)
+      const targetInput = document.getElementById('input-target');
+      targetInput.addEventListener('change', () => {
+        const val = Number(targetInput.value);
+        if (Number.isFinite(val)) {
+          state.target = val;
+          dealNewCards();
+        }
+      });
+
+      document.querySelectorAll('.target-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          state.target = Number(chip.dataset.target);
+          targetInput.value = state.target;
+          dealNewCards();
+        });
+      });
+
+      document.getElementById('btn-random-target').addEventListener('click', () => {
+        const pool = [24, 36, 48, 60, 72, 84, 96, 100, 120, 144, 180, 240];
+        const next = pool[Math.floor(Math.random() * pool.length)];
+        state.target = next;
+        targetInput.value = next;
+        dealNewCards();
+      });
+
+      // Deal & Next Hand
+      document.getElementById('btn-deal').addEventListener('click', dealNewCards);
+      document.getElementById('btn-next-hand').addEventListener('click', dealNewCards);
+
+      // Parentheses, Operators, Backspace, Clear
+      document.getElementById('btn-lparen').addEventListener('click', onLeftParenClick);
+      document.getElementById('btn-rparen').addEventListener('click', onRightParenClick);
+      document.querySelectorAll('.op-btn').forEach((btn) => {
+        btn.addEventListener('click', () => onOperatorClick(btn.dataset.op));
+      });
+      document.getElementById('btn-backspace').addEventListener('click', onBackspace);
+      document.getElementById('btn-clear').addEventListener('click', onClear);
+
+      // Hint & Multiple Solutions Viewer
+      document.getElementById('btn-hint').addEventListener('click', showNextHint);
+      document.getElementById('btn-toggle-solutions').addEventListener('click', () => {
+        state.solutionsVisible = !state.solutionsVisible;
+        render();
+      });
+      document.getElementById('chk-auto-solutions').addEventListener('change', (e) => {
+        state.autoShowSolutions = e.target.checked;
+        state.solutionsVisible = state.autoShowSolutions;
+        render();
+      });
+
+      // Bilingual & Offline Download
+      document.getElementById('btn-lang').addEventListener('click', () => {
+        state.lang = state.lang === 'zh' ? 'en' : 'zh';
+        render();
+      });
+      document.getElementById('btn-download').addEventListener('click', downloadOfflineHtml);
+
+      // Convenient keyboard shortcuts for brackets, operators & backspace
+      window.addEventListener('keydown', (e) => {
+        if (document.activeElement === targetInput) return;
+        if (e.key === '(') {
+          e.preventDefault();
+          onLeftParenClick();
+        } else if (e.key === ')') {
+          e.preventDefault();
+          onRightParenClick();
+        } else if (['+', '-', '*', '/'].includes(e.key)) {
+          e.preventDefault();
+          onOperatorClick(e.key);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          onBackspace();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          onClear();
+        }
+      });
+
+      // Deal initial solvable 5-card hand targeting 120
+      dealNewCards();
+    });
+  </script>
+</body>
+</html>
